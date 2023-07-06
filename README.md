@@ -1,4 +1,4 @@
-# M.Sc. Data Scince for Economics, the University of Milan
+# M.Sc. Data Scince for Economics, UniMi🎓
 
 Please see my university-related projects:
 
