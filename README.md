@@ -1,4 +1,6 @@
-# M.Sc. Data Scince for Economics, UniMi🎓
+# 🎓University-related projects
 
-Please see my university-related projects:
+M.Sc. Data Scince for Economics, UniMi:
+
+B.A. Global Governance, UniTV:
 
