@@ -2,5 +2,5 @@
 
 M.Sc. Data Scince for Economics, UniMi:
 
-B.A. Global Governance, UniTV:
+B.A. Global Governance, UniRoma2:
 
