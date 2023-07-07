@@ -1,4 +1,4 @@
-# 🎓University-related projects
+# University-related projects🎓
 
 M.Sc. Data Scince for Economics, UniMi:
 
