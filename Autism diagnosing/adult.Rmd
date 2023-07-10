@@ -1,0 +1,584 @@
+---
+title: "adult autism"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r cars}
+library(foreign)
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(corrplot)
+library(foreign)
+library(tidyr)
+library(likert)
+library(sqldf)
+library(gbm)
+library(glmnet)
+library(class)
+library(Metrics)
+library(psych)
+library(GPArotation)
+```
+
+```{r pressure, echo=FALSE}
+setwd("C:\\Users\\arina\\OneDrive\\Documents\\DSE\\ML\\Salini\\projects\\ML projects")
+df = read.arff('Autism-Adult-Data.arff')
+df = as.data.frame(df)
+summary(df)
+sum(is.na(df$age))
+
+#checking missing values
+missing_values_sum <- colSums(is.na(df))
+print(missing_values_sum)
+
+#replace NaN with 'missing'
+df$ethnicity <- as.character(df$ethnicity)
+df$ethnicity[is.na(df$ethnicity)] <- "missing"
+df$ethnicity <- as.factor(df$ethnicity)
+
+df$relation <- as.character(df$relation)
+df$relation[is.na(df$relation)] <- "missing"
+df$relation <- as.factor(df$relation)
+
+missing_values_sum <- colSums(is.na(df))
+print(missing_values_sum)
+
+levels(df$ethnicity) <- gsub("others", "Others", levels(df$ethnicity))
+levels(df$ethnicity)
+
+#substite for missing age
+df$age <- as.numeric(df$age)
+hist(df$age, breaks = 100, col = "blue", xlab = "age", ylab = "Frequency", main = "Histogram of age")
+#there is no normal distribution -> replace with median
+print(df$age)
+df$age[df$age == 383] <- NA
+hist(df$age, breaks = 100, col = "blue", xlab = "age", ylab = "Frequency", main = "Histogram of age")
+median_value <- median(df$age, na.rm = TRUE)
+
+df$age[is.na(df$age)] <- 27
+
+missing_values_sum <- colSums(is.na(df))
+print(missing_values_sum)
+str(df)
+#remove age_desc as it is the same
+df <- subset(df, select = -age_desc)
+```
+
+```{r}
+# z.test(long$value, mu= 0.5442, sigma.x = 0.4980475)
+# 
+# 	One-sample z-Test
+# 
+# data:  long$value
+# z = -25.82, p-value < 2.2e-16
+# alternative hypothesis: true mean is not equal to 0.5442
+# 95 percent confidence interval:
+#  0.4601855 0.4720405
+# sample estimates:
+# mean of x 
+#  0.466113 
+
+
+```
+
+```{r}
+### EDA ###
+
+#distribution of test scores
+hist(df$result, breaks = 100, col = "blue", xlab = "age", ylab = "Frequency", main = "Test results")
+
+#yes vs. no autism
+ggplot(df, aes(x = `Class/ASD`)) +
+  geom_bar(stat = "count") +
+  labs(x = "Class/ASD", y = "Count") +
+  theme_minimal()
+
+#yes vs. no autism in relatives
+ggplot(df, aes(x = `austim`, fill = `Class/ASD`)) +
+  geom_bar(stat = "count") +
+  labs(x = "Autism in relatives", y = "Count") +
+  theme_minimal()
+
+#yes vs. no jaundice
+ggplot(df, aes(x =`jundice`, fill = `Class/ASD`)) +
+  geom_bar(stat = "count") +
+  labs(x = "Jaundice", y = "Count") +
+  theme_minimal()
+#ethnicities
+ggplot(df, aes(x = ethnicity, fill = `Class/ASD`)) +
+  geom_bar(stat = "count") +
+  labs(x = "Ethnicity", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#one hot encoding with dummy variables
+factor_cols <- sapply(df, is.factor)
+encoded_data <- model.matrix(~.-1, data = df[, factor_cols])
+df2 <- cbind(df[, !factor_cols], encoded_data)
+df2 <- df2[,-c(3)]
+
+# #oversampling
+# 
+# # Separate Target Classes
+# df_1 <- df2[df2$"`Class/ASD`YES" == 0, ]
+# df_2 <- df2[df2$"`Class/ASD`YES" == 1, ]
+# 
+# # Upsample minority class
+# df_2_upsampled <- df_2[sample(nrow(df_2), 615, replace = TRUE), ]
+# 
+# # Combine majority class with upsampled minority class
+# df2_upsampled <- rbind(df_1, df_2_upsampled)
+# 
+# # Display new class counts
+# class_counts <- table(df2_upsampled$"`Class/ASD`YES")
+# barplot(class_counts, main = "Class/ASD", xlab = "Class/ASD", ylab = "Count")
+
+```
+
+```{r}
+### Supervised learning ###
+
+#split into test and train, get rid of multicollinear variables
+grep("austimyes", colnames(df2))
+grep("relationmissing",colnames(df2))
+grep("`Class/ASD`YES", colnames(df2))
+grep("result", colnames(df2))
+
+#replicate gaussian distribution by logging result and age
+df2$"age" = log(df2$"age"+1)
+
+X <- df2[,-c(2,98)]
+y <- df2$"`Class/ASD`YES"
+ 
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train <- X[train_indices, ]
+y_train <- y[train_indices]
+X_test <- X[-train_indices, ]
+y_test <- y[-train_indices]
+
+```
+
+```{r}
+ncol(X) == qr(X)$rank
+
+calculate_vif <- function(X) {
+  # Calculate VIF for each variable
+  vif_values <- cor(X)^2
+  
+  # Identify variables with high VIF (threshold can be adjusted)
+  high_vif_vars <- names(vif_values)[vif_values > 0.5]
+  
+  # Print variables with high multicollinearity
+  if (length(high_vif_vars) > 0) {
+    cat("Variables with high multicollinearity (VIF > 5):\n")
+    cat(high_vif_vars, sep = ", ")
+    cat("\n")
+  } else {
+    cat("No variables with high multicollinearity (VIF > 5) found.\n")
+  }
+  
+  # Return the VIF values
+  return(vif_values)
+}
+
+vif_results <- calculate_vif(X)
+```
+
+```{r}
+
+### Model 1: Linear regression ###
+
+model <- lm(y_train ~ ., data = X_train)
+summary(model)
+
+```
+
+```{r}
+
+#multicollinearity -> exclude country of residence
+df2_2<-df2[, -c(26:97)]
+
+grep("Class/ASD", colnames(df2_2))
+grep("result", colnames(df2_2))
+
+X2 <- df2_2[,-c(2,26)]
+y2 <- df2_2$"`Class/ASD`YES"
+
+train_indices2 <- createDataPartition(y2, p = 0.8, list = FALSE)
+X_train2 <- X2[train_indices, , drop = FALSE]
+y_train2 <- y2[train_indices]
+X_test2 <- X2[-train_indices, ]
+y_test2 <- y2[-train_indices]
+
+model2 <- lm(y_train2 ~ ., data = X_train2)
+summary(model2)
+
+#sapply(X_train, class)
+
+```
+
+```{r}
+
+
+# Lin reg w/o questions
+
+x3 <- df2_2[,-c(2:12, 26)]
+y3 <- df2_2$"`Class/ASD`YES"
+
+train_indices3 <- createDataPartition(y3, p = 0.8, list = FALSE)
+X_train3 <- x3[train_indices, , drop = FALSE]
+y_train3 <- y3[train_indices]
+X_test3 <- x3[-train_indices, ]
+y_test3 <- y3[-train_indices]
+
+model3 <- lm(y_train3 ~ ., data = X_train3)
+summary(model3)
+
+model4 <- glm(y_train3 ~ ., data = X_train3, family =binomial)
+summary(model4)
+```
+
+```{r}
+library(ggcorrplot)
+data3 <- cbind(x3, y3)
+corr <- round(cor(data3), 1)
+ggcorrplot(corr, method = "circle")
+
+
+
+```
+
+```{r}
+### Ridge regression ###
+X_train3 <- as.matrix(X_train3)
+X_test3 <- as.matrix(X_test3)
+
+cv <- cv.glmnet(X_train3, y_train3, alpha = 0)
+cv$lambda.min
+#[1] 0.03302436
+
+ridge <- glmnet(X_train3, y_train3, alpha = 0, lambda = cv$lambda.min)
+coef(ridge)
+
+predictions <- ridge %>% predict(X_test3) %>% as.vector()
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions, y_test3),
+  Rsquare = R2(predictions, y_test3)
+)
+#RMSE   Rsquare
+# 0.2314875 0.7887824
+
+
+### Lasso regression ###
+
+cv2 <- cv.glmnet(X_train3, y_train3, alpha = 1)
+cv2$lambda.min
+
+lasso <- glmnet(X_train3, y_train3, alpha = 1, lambda = cv2$lambda.min)
+coef(lasso)
+
+predictions2 <- lasso %>% predict(X_test3) %>% as.vector()
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions2, y_test3),
+  Rsquare = R2(predictions2, y_test3)
+)
+
+#RMSE  Rsquare
+#1 0.2305083 0.789022
+
+### Elastic net###
+y_train_f <- factor(y_train3, levels = c(0, 1))
+y_test_f <- factor(y_test3, levels = c(0, 1))
+
+el_model <- train(X_train3, y_train_f, method = "glmnet",
+                  trControl = trainControl("cv", number = 10),
+                  tuneLength = 10)
+
+print(el_model)
+# Best tuning parameter
+el_model$bestTune
+#   alpha lambda
+#0.9 0.004389713
+
+coef_el_model <- coef(el_model$finalModel, s = el_model$bestTune$lambda)
+
+# Print the coefficients
+# Make predictions on the test set
+predictions3 <- predict(el_model, newdata = X_test3)
+
+predictions3 <- as.numeric(as.character(predictions3))
+y_test_f <- as.numeric(as.character(y_test_f))
+
+# Model performance metrics
+data.frame(
+  RMSE = RMSE(predictions3, y_test_f),
+  Rsquare = R2(predictions3, y_test_f)
+)
+
+
+### Graphs ###
+# Calculate RMSE
+
+
+# Create a data frame to store the performance metrics
+model_performance <- data.frame(
+  Model = c("Ridge Regression", "Lasso Regression", "Elastic Net"),
+  RMSE = c(RMSE(predictions, y_test_f), RMSE(predictions2, y_test_f), RMSE(predictions3, y_test_f)),
+  Rsquared = c(R2(predictions, y_test_f), R2(predictions2, y_test_f), R2(predictions3, y_test_f))
+)
+
+# Bar plot for RMSE
+barplot(model_performance$RMSE, names.arg = model_performance$Model,
+        ylim = c(0, max(model_performance$RMSE) + 0.05),
+        xlab = "Model", ylab = "RMSE", main = "Root Mean Squared Error (RMSE)")
+
+# Bar plot for R-squared
+barplot(model_performance$Rsquared, names.arg = model_performance$Model,
+        ylim = c(0, max(model_performance$Rsquared) + 0.05),
+        xlab = "Model", ylab = "R-squared", main = "R-squared")
+
+```
+
+```{r}
+### K-NN ###
+# Set the number of neighbors (k)
+k <- 31
+knn_model <- knn(train = X_train3, test = X_test3, cl = y_train3, k = k)
+knn_predictions <- as.factor(knn_model)
+
+conf_matrix <- table(knn_predictions, y_test3)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(conf_matrix)
+
+k <- 10
+knn_model2 <- knn(train = X_train3, test = X_test3,cl = y_train3, k = 10)
+knn_predictions2 <- as.factor(knn_model2)
+print(knn_predictions2)
+
+conf_matrix2 <- table(knn_predictions2, y_test3)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(conf_matrix2)
+
+
+### Gradient boosting ###
+# 
+# model_gbm = gbm(y_train ~.,
+#                 data = X_train,
+#                 distribution = "adaboost",
+#                 cv.folds = 10,
+#                 shrinkage = .01,
+#                 n.minobsinnode = 10,
+#                 n.trees = 50)
+# 
+# summary(model_gbm)
+
+```
+
+Random forest
+
+```{r}
+library(randomForest)
+library(caret)
+library(ggplot2)
+# Set the number of folds for cross-validation
+num_folds <- 5
+
+# Create the control parameters for cross-validation
+ctrl <- trainControl(method = "cv", 
+                     number = num_folds, 
+                     savePredictions = TRUE,
+                     classProbs = TRUE)
+levels(y_train_f)<- make.names(levels(y_train_f))
+
+
+# Build the random forest model with cross-validation
+rf <- train(y = y_train_f, x = X_train3, method = "rf", trControl = ctrl)
+
+# Get the cross-validation results
+cv_results <- rf$results
+importance <- varImp(rf)
+
+importance_df <- data.frame(
+  Variables = row.names(importance$importance),
+  Importance = importance$importance[, 1]  # MeanDecreaseGini importance measure
+)
+
+importance_df <- importance_df[order(importance_df$Importance, decreasing = TRUE), ]
+
+p <- ggplot(importance_df, aes(x = reorder(Variables, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  xlab("Variables") +
+  ylab("Importance") +
+  ggtitle("Random Forest - Variable Importance") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(p)
+
+tree_slips <- as.data.frame(rf$err.rate)
+
+```
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(ggplot2)
+
+# Set the number of folds for cross-validation
+num_folds <- 10
+
+# Build the decision tree model with cross-validation
+dt <- rpart(formula = y_train_f ~ ., data = data.frame(X_train3),
+            control = rpart.control(cp = 0),
+            parms = list(split = "information"),
+            method = "class",
+            xval = num_folds)
+
+options(repr.plot.width = 10, repr.plot.height = 80)
+rpart.plot(dt)
+
+# Calculate the out-of-sample error rate
+oos_error <- 1 - dt$cptable[, "xerror"]
+
+# Create the tree slips plot
+p <- ggplot(data.frame(Pruning_Cost = dt$cptable[, "CP"], Out_of_Sample_Error = oos_error),
+            aes(x = Pruning_Cost, y = Out_of_Sample_Error)) +
+  geom_line() +
+  xlab("Pruning Cost") +
+  ylab("Out-of-Sample Error Rate") +
+  ggtitle("Decision Tree - Tree Slips")
+
+print(p)
+
+# Model 2
+num_folds <- 10
+dt2 <- rpart(formula = y_train_f~ ., data = data.frame(X_train3),
+            control = rpart.control(cp = 0),
+            parms = list(split = "information"),
+            method = "class",
+            xval = num_folds)
+
+# Prune the tree to the first 3 levels
+pruned_dt <- prune(tree = dt2, cp = dt2$cptable[3, "CP"])
+
+# Increase the size of the plot
+options(repr.plot.width = 10, repr.plot.height = 8)  # Adjust the width and height as needed
+
+# Plot the pruned decision tree (first four levels)
+rpart.plot(pruned_dt, main = "Decision Tree (Pruned)", fallen.leaves = TRUE, cex.main = 1.2)
+
+oos_error <- 1 - dt2$cptable[, "xerror"]
+
+# Create a data frame with Pruning_Cost and Out_of_Sample_Error
+data <- data.frame(Pruning_Cost = dt2$cptable[, "CP"], Out_of_Sample_Error = oos_error)
+
+# Create the tree slips plot
+p2 <- ggplot(data, aes(x = Pruning_Cost, y = Out_of_Sample_Error)) +
+  geom_line() +
+  xlab("Pruning Cost") +
+  ylab("Out-of-Sample Error Rate") +
+  ggtitle("Decision Tree - Tree Slips")
+
+# Print the tree slips plot
+print(p2)
+
+
+```
+
+```{r}
+library(randomForest)
+library(ggplot2)
+
+# Set the number of folds for cross-validation
+num_folds <- 10
+
+# Build the random forest model with cross-validation and keep.forest = TRUE
+rf <- randomForest(x = X_train3, y = y_train_f, keep.forest = TRUE, cv.fold = num_folds)
+
+# Get the variable importance
+importance <- importance(rf)
+
+importance_df <- data.frame(
+  Variables = row.names(importance),
+  Importance = importance[, 1]  # Mean Decrease Gini importance measure
+)
+importance_df <- importance_df[order(importance_df$Importance, decreasing = TRUE), ]
+
+# Create the variable importance plot
+p1 <- ggplot(importance_df, aes(x = reorder(Variables, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  xlab("Variables") +
+  ylab("Importance") +
+  ggtitle("Random Forest - Variable Importance") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate the OOB error rate
+oob_error <- data.frame(
+  Number_of_Trees = seq(1, rf$ntree),
+  OOB_Error_Rate = 1 - rf$err.rate[, "OOB"]
+)
+
+# Create the tree slips plot
+p2 <- ggplot(oob_error, aes(x = Number_of_Trees, y = OOB_Error_Rate)) +
+  geom_line() +
+  xlab("Number of Trees") +
+  ylab("Out-of-Bag Error Rate") +
+  ggtitle("Random Forest - Tree Slips")
+
+# Combine the plots
+library(gridExtra)
+combined_plot <- grid.arrange(p1, p2, nrow = 2)
+print(combined_plot)
+
+
+```
+
+```{r}
+### Factor analysis = UNSUPERVISED ###
+# * 0.00 to 0.49 unacceptable
+# * 0.50 to 0.59 miserable
+# * 0.60 to 0.69 mediocre
+# * 0.70 to 0.79 middling
+# * 0.80 to 0.89 meritorious
+# * 0.90 to 1.00 marvelous
+
+KMO(X_train3)
+print(KMO(X_train3))
+factor_df <- X_train3[, KMO(X_train3)$MSAi>0.50]
+round( KMO(factor_df)$MSA, 1 )
+
+ev <- eigen(cor(factor_df)) # get eigenvalues
+ev$values
+scree(factor_df, pc=FALSE)
+fa.parallel(factor_df, fa="fa")
+#Parallel analysis suggests that the number of factors =  3  and the number of components =  NA 
+# trying 2 factors
+# facs <- 2
+# fit <- factanal(factor_df, facs, rotation="promax")
+# print(fit, digits=2, cutoff=0.3, sort=TRUE)
+# 
+# ## Correlation are low -> tryong oblique
+# facs <- 2
+# fit <- factanal(factor_df, facs, rotation="oblimin")
+# print(fit, digits=2, cutoff=0.3, sort=TRUE)
+```
+
+```{r}
+library(arules)
+matrix4 <- as.matrix(data3)
+transactions <- as(matrix4, "transactions")
+
+rules <- apriori(transactions, parameter = list(support = 0.03, confidence = 0.5, minlen = 2), appearance = list(rhs = "y3"))
+
+# Show the generated rules
+inspect(rules)
+
+```
