@@ -1,6 +1,6 @@
 # University-related projects🎓
 
-M.Sc. in Data Scince for Economics, UniMi:
+M.Sc. in Data Science for Economics, UniMi:
 
 - 🎵[Spotify songs popularity](https://github.com/arina19-2000/unimi/tree/main/Spotify%20song%20popularity): this Python project analyses the Spotify dataset to assess the impact of various features on the song popularity, using a custom Ridge Regression implementation (without scikit-learn or similar libraries).
 
