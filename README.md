@@ -6,7 +6,7 @@ M.Sc. in Data Scince for Economics, UniMi:
 
 - ⚽[Marketing analytics project and exercises](https://github.com/arina19-2000/unimi/tree/main/Marketing%20analytics): these are materials from the Marketing analytics course, including the final project on the case study of a football shoes producer Akuna.
 
-- 🐬[Network Science](https://github.com/arina19-2000/unimi/tree/main/Network%20Science): this Python project aims to compare and contrast between the networks of dolphins and humans and find whether there are any similarities.
+- 🐬[Network Science](https://github.com/arina19-2000/unimi/tree/main/Network%20Science): this Python project aims to compare and contrast between the networks of dolphins and humans and find whether there are any similarities in their social communication styles.
   
 - ⚕️ [Autism diagnosing](https://github.com/arina19-2000/unimi/tree/main/Autism%20diagnosing): this R project aims to define the main socio-demographic and medical features which might be linked to being diagnosed with autism.
 
