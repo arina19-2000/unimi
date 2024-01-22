@@ -1,1 +1,2 @@
 Network science project summary:
+The project looks into the community structure of a group of dolphins and a group of humans and attempts to pinpoint major similarities and differences between the two, using the descriptive statistics as well as communicty detection algorithms such as Greedy and Louvain. Additionally, the project proposes machine learning models for link prediction, which could be used to define connections between nodes in similar datasets.
